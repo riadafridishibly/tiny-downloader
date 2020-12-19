@@ -2,14 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/dustin/go-humanize"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 type WriteCounter struct {
@@ -46,7 +49,7 @@ func Download(url, filename string, startAt, count uint64, writeCounter *WriteCo
 
 	client := http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
-	req.Header.Set("Ranges", "bytes="+start+"-"+end)
+	req.Header.Set("Range", "bytes="+start+"-"+end)
 
 	if err != nil {
 		return err
@@ -138,12 +141,32 @@ func main() {
 		}
 	}(writeCounter, uint64(contentLength))
 
-	err = Download(url, filename, 0, uint64(contentLength), writeCounter)
+	// err = Download(url, filename, 0, uint64(contentLength), writeCounter)
 
-	if err != nil {
-		panic(err)
+	wg := sync.WaitGroup{}
+
+	dl := func(url, filename string, start, count uint64) {
+		defer wg.Done()
+		err := Download(url, filename, start, count, writeCounter)
+		if err != nil {
+			panic(err)
+		}
 	}
 
+	n := 8
+
+	if isRangeSupported {
+		size := uint64(math.Ceil(float64(contentLength) / float64(n)))
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go dl(url, filename+".part"+strconv.Itoa(i), uint64(i)*size, size)
+		}
+	} else {
+		wg.Add(1)
+		go dl(url, filename, 0, uint64(contentLength))
+	}
+
+	wg.Wait()
 	// wait for progress bar to finish
 	<-done
 }
