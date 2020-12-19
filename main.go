@@ -7,10 +7,26 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 )
 
+type WriteCounter struct {
+	Total uint64
+}
+
+func (wc *WriteCounter) Write(buf []byte) (int, error) {
+	n := len(buf)
+	atomic.AddUint64(&wc.Total, uint64(n))
+	return n, nil
+}
+
+func (wc *WriteCounter) GetCount() uint64 {
+	return atomic.LoadUint64(&wc.Total)
+}
+
 // Download a file
-func Download(url, filename string, startAt, count uint64) error {
+func Download(url, filename string, startAt, count uint64, writeCounter *WriteCounter) error {
 	start := strconv.FormatUint(startAt, 10)
 	end := strconv.FormatUint(startAt+count-1, 10)
 
@@ -34,7 +50,9 @@ func Download(url, filename string, startAt, count uint64) error {
 	}
 	defer outfile.Close()
 
-	_, err = io.Copy(outfile, resp.Body)
+	src := io.TeeReader(resp.Body, writeCounter)
+
+	_, err = io.Copy(outfile, src)
 	if err != nil {
 		return err
 	}
@@ -65,6 +83,10 @@ func main() {
 		}
 	}
 
+	// TODO: spawn some goroutine
+	if isRangeSupported {
+	}
+
 	contentLength := header.ContentLength
 
 	filename := ""
@@ -80,16 +102,34 @@ func main() {
 		}
 	}
 
-	fmt.Printf("%v\n", filename)
-	fmt.Println("Ranges: ", isRangeSupported, "\nContent-Length: ", contentLength)
-
 	if filename == "" {
 		filename = "output"
 	}
 
-	err = Download(url, filename, 0, uint64(contentLength))
+	writeCounter := &WriteCounter{Total: 0}
+
+	done := make(chan struct{})
+	// show a progress bar
+	// TODO: shift this to a standalone function
+	go func(wc *WriteCounter, contentLength uint64) {
+		for {
+			written := wc.GetCount()
+			fmt.Printf("\r[%s] Downloaded: %.2f%%", filename, (float64(written)/float64(contentLength))*100)
+			if written >= contentLength {
+				fmt.Println()
+				done <- struct{}{}
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}(writeCounter, uint64(contentLength))
+
+	err = Download(url, filename, 0, uint64(contentLength), writeCounter)
 
 	if err != nil {
 		panic(err)
 	}
+
+	// wait for progress bar to finish
+	<-done
 }
