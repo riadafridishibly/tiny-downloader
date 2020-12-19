@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/dustin/go-humanize"
 	"io"
 	"net/http"
 	"os"
@@ -12,7 +13,9 @@ import (
 )
 
 type WriteCounter struct {
-	Total uint64
+	LastTime  int64
+	LastWrite uint64
+	Total     uint64
 }
 
 func (wc *WriteCounter) Write(buf []byte) (int, error) {
@@ -23,6 +26,17 @@ func (wc *WriteCounter) Write(buf []byte) (int, error) {
 
 func (wc *WriteCounter) GetCount() uint64 {
 	return atomic.LoadUint64(&wc.Total)
+}
+
+func (wc *WriteCounter) GetSpeed() string {
+	now := time.Now().UnixNano()
+	seconds := float64(now-wc.LastTime) * 1e-9
+	bytesWritten := wc.GetCount() - wc.LastWrite
+
+	// wc.LastWrite = wc.GetCount()
+	// wc.LastTime = time.Now().UnixNano()
+
+	return humanize.Bytes(uint64(float64(bytesWritten)/seconds)) + "/s"
 }
 
 // Download a file
@@ -83,10 +97,6 @@ func main() {
 		}
 	}
 
-	// TODO: spawn some goroutine
-	if isRangeSupported {
-	}
-
 	contentLength := header.ContentLength
 
 	filename := ""
@@ -106,7 +116,11 @@ func main() {
 		filename = "output"
 	}
 
-	writeCounter := &WriteCounter{Total: 0}
+	// TODO: spawn some goroutine
+	if isRangeSupported {
+	}
+
+	writeCounter := &WriteCounter{Total: 0, LastTime: time.Now().UnixNano()}
 
 	done := make(chan struct{})
 	// show a progress bar
@@ -114,7 +128,7 @@ func main() {
 	go func(wc *WriteCounter, contentLength uint64) {
 		for {
 			written := wc.GetCount()
-			fmt.Printf("\r[%s] Downloaded: %.2f%%", filename, (float64(written)/float64(contentLength))*100)
+			fmt.Printf("\r[%s] Downloaded: %.2f%% %s", filename, (float64(written)/float64(contentLength))*100, wc.GetSpeed())
 			if written >= contentLength {
 				fmt.Println()
 				done <- struct{}{}
