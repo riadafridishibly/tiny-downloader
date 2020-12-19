@@ -87,7 +87,7 @@ func main() {
 		filename = "output"
 	}
 
-	err = Download(url, "out/"+filename, 0, uint64(contentLength))
+	err = Download(url, filename, 0, uint64(contentLength))
 
 	if err != nil {
 		panic(err)
