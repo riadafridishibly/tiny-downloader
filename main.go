@@ -1,8 +1,8 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"net/http"
@@ -10,81 +10,30 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
-
-	"github.com/dustin/go-humanize"
 )
 
-type WriteCounter struct {
-	LastTime  int64
-	LastWrite uint64
-	Total     uint64
-}
-
-func (wc *WriteCounter) Write(buf []byte) (int, error) {
-	n := len(buf)
-	atomic.AddUint64(&wc.Total, uint64(n))
-	return n, nil
-}
-
-func (wc *WriteCounter) GetCount() uint64 {
-	return atomic.LoadUint64(&wc.Total)
-}
-
-func (wc *WriteCounter) GetSpeed() string {
-	now := time.Now().UnixNano()
-	seconds := float64(now-wc.LastTime) * 1e-9
-	bytesWritten := wc.GetCount() - wc.LastWrite
-
-	// wc.LastWrite = wc.GetCount()
-	// wc.LastTime = time.Now().UnixNano()
-
-	return humanize.Bytes(uint64(float64(bytesWritten)/seconds)) + "/s"
-}
-
-// Download a file
-func Download(url, filename string, startAt, count uint64, writeCounter *WriteCounter) error {
-	start := strconv.FormatUint(startAt, 10)
-	end := strconv.FormatUint(startAt+count-1, 10)
-
-	client := http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	req.Header.Set("Range", "bytes="+start+"-"+end)
-
-	if err != nil {
-		return err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	outfile, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer outfile.Close()
-
-	src := io.TeeReader(resp.Body, writeCounter)
-
-	_, err = io.Copy(outfile, src)
-	if err != nil {
-		return err
-	}
-
-	return nil
+// Usage prints the usages of this application
+var Usage = func() {
+	h := ""
+	h += fmt.Sprintf("Usages:")
+	h += fmt.Sprintf("\t%s [-n N] <url>\n", os.Args[0])
+	h += fmt.Sprintf("\t%-10s%-10s%s", "-n", "<n>", "Number of goroutine for downloading\n")
+	fmt.Fprintf(os.Stderr, h)
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage:\n\t%s <url>\n", os.Args[0])
+	flag.Usage = Usage
+	var ngoroutine int
+	flag.IntVar(&ngoroutine, "n", 8, "Number of goroutine for downloading")
+	flag.Parse()
+
+	if flag.NArg() != 1 {
+		flag.Usage()
 		os.Exit(1)
 	}
 
-	url := os.Args[1]
+	url := flag.Arg(0)
 
 	header, err := http.Head(url)
 	if err != nil {
@@ -123,20 +72,8 @@ func main() {
 	writeCounter := &WriteCounter{Total: 0, LastTime: time.Now().UnixNano()}
 
 	done := make(chan struct{})
-	// show a progress bar
-	// TODO: shift this to a standalone function
-	go func(wc *WriteCounter, contentLength uint64) {
-		for {
-			written := wc.GetCount()
-			fmt.Printf("\r[%s] Downloaded: %.2f%% %s", filename, (float64(written)/float64(contentLength))*100, wc.GetSpeed())
-			if written >= contentLength {
-				fmt.Println()
-				done <- struct{}{}
-				return
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}(writeCounter, uint64(contentLength))
+
+	go ShowProgress(writeCounter, uint64(contentLength), filename, done)
 
 	// err = Download(url, filename, 0, uint64(contentLength), writeCounter)
 
@@ -150,9 +87,16 @@ func main() {
 		}
 	}
 
-	n := 8
+	n := ngoroutine
 
-	if isRangeSupported {
+	if n < 0 || n > 16 {
+		n = 8
+	}
+
+	aggregateNeeded := false
+
+	if isRangeSupported && contentLength > 1024 {
+		aggregateNeeded = true
 		size := uint64(math.Ceil(float64(contentLength) / float64(n)))
 		for i := 0; i < n; i++ {
 			wg.Add(1)
@@ -165,30 +109,12 @@ func main() {
 
 	wg.Wait()
 
-	if isRangeSupported {
-		// aggregate all the part files
+	if aggregateNeeded {
+		err := AggregateFiles(filename, n)
 
-		mainFile, err := os.OpenFile(filename+".part0", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		for i := 1; i < n; i++ {
-			partFilename := filename + ".part" + strconv.Itoa(i)
-			part, err := os.Open(partFilename)
-			if err != nil {
-				log.Fatal(err)
-			}
-			io.Copy(mainFile, part)
-
-			os.Remove(partFilename)
-		}
-
-		err = os.Rename(filename+".part0", filename)
-		if err != nil {
-			log.Fatal(err)
-		}
-
 	}
 	// wait for progress bar to finish
 	<-done
