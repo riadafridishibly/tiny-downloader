@@ -72,6 +72,7 @@ func main() {
 
 	if filename == "" {
 		filename = path.Base(url)
+		filename = strings.ReplaceAll(filename, "%20", " ")
 		if filename == "/" || filename == "." {
 			filename = "output"
 		}
