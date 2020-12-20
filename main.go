@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -87,7 +88,7 @@ func main() {
 
 	header, err := http.Head(url)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	// check if server supports byte ranges
@@ -119,10 +120,6 @@ func main() {
 		filename = "output"
 	}
 
-	// TODO: spawn some goroutine
-	if isRangeSupported {
-	}
-
 	writeCounter := &WriteCounter{Total: 0, LastTime: time.Now().UnixNano()}
 
 	done := make(chan struct{})
@@ -149,7 +146,7 @@ func main() {
 		defer wg.Done()
 		err := Download(url, filename, start, count, writeCounter)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 	}
 
@@ -167,6 +164,32 @@ func main() {
 	}
 
 	wg.Wait()
+
+	if isRangeSupported {
+		// aggregate all the part files
+
+		mainFile, err := os.OpenFile(filename+".part0", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for i := 1; i < n; i++ {
+			partFilename := filename + ".part" + strconv.Itoa(i)
+			part, err := os.Open(partFilename)
+			if err != nil {
+				log.Fatal(err)
+			}
+			io.Copy(mainFile, part)
+
+			os.Remove(partFilename)
+		}
+
+		err = os.Rename(filename+".part0", filename)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+	}
 	// wait for progress bar to finish
 	<-done
 }
