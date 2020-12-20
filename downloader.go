@@ -1,20 +1,23 @@
 package main
 
 import (
+	"fmt"
 	"io"
+	"log"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 )
 
 // Download downloads a single file
 func Download(url, filename string, startAt, count uint64, writeCounter *WriteCounter) error {
-	start := strconv.FormatUint(startAt, 10)
-	end := strconv.FormatUint(startAt+count-1, 10)
-
 	client := http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
-	req.Header.Set("Range", "bytes="+start+"-"+end)
+
+	rangeValue := fmt.Sprintf("bytes=%d-%d", startAt, startAt+count-1)
+	req.Header.Set("Range", rangeValue)
 
 	if err != nil {
 		return err
@@ -39,6 +42,48 @@ func Download(url, filename string, startAt, count uint64, writeCounter *WriteCo
 		return err
 	}
 
+	return nil
+}
+
+// DownloadConcurrent downloads file using n goroutine
+func DownloadConcurrent(url, filename string, n int, contentLength int64, wc *WriteCounter) error {
+	wg := sync.WaitGroup{}
+
+	dl := func(url, filename string, start, count uint64) {
+		defer wg.Done()
+		err := Download(url, filename, start, count, wc)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	if n < 0 || n > 16 {
+		n = 8
+	}
+
+	aggregateNeeded := false
+
+	if n > 1 {
+		aggregateNeeded = true
+		size := uint64(math.Ceil(float64(contentLength) / float64(n)))
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go dl(url, filename+".part"+strconv.Itoa(i), uint64(i)*size, size)
+		}
+	} else {
+		wg.Add(1)
+		go dl(url, filename, 0, uint64(contentLength))
+	}
+
+	wg.Wait() // wait for all downloader to finish
+
+	if aggregateNeeded {
+		err := AggregateFiles(filename, n)
+
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
