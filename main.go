@@ -78,7 +78,7 @@ func main() {
 
 	done := make(chan struct{})
 
-	go ShowProgress(writeCounter, uint64(contentLength), filename, done)
+	go ShowProgress(writeCounter, contentLength, filename, done)
 
 	if isRangeSupported && contentLength > 1024 {
 		DownloadConcurrent(url, filename, ngoroutine, contentLength, writeCounter)

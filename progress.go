@@ -11,18 +11,23 @@ import (
 // WriteCounter tracks the number of bytes downloaded
 type WriteCounter struct {
 	LastTime int64
-	Total    uint64
+	Total    int64
+}
+
+// Add adds value to the counter atomically
+func (wc *WriteCounter) Add(n int64) {
+	atomic.AddInt64(&wc.Total, n)
 }
 
 func (wc *WriteCounter) Write(buf []byte) (int, error) {
 	n := len(buf)
-	atomic.AddUint64(&wc.Total, uint64(n))
+	wc.Add(int64(n))
 	return n, nil
 }
 
 // GetCount returns the total bytes downloaded
-func (wc *WriteCounter) GetCount() uint64 {
-	return atomic.LoadUint64(&wc.Total)
+func (wc *WriteCounter) GetCount() int64 {
+	return atomic.LoadInt64(&wc.Total)
 }
 
 // GetSpeed calculates the speed of download
@@ -34,13 +39,13 @@ func (wc *WriteCounter) GetSpeed() string {
 }
 
 // ShowProgress prints the download progress concurrently
-func ShowProgress(wc *WriteCounter, contentLength uint64, filename string, done chan struct{}) {
+func ShowProgress(wc *WriteCounter, contentLength int64, filename string, done chan struct{}) {
 	for {
 		written := wc.GetCount()
 		fmt.Printf("\r[%s] Downloaded: [%s/%s] (%.2f%%) DL: %s",
 			filename,
-			humanize.Bytes(written),
-			humanize.Bytes(contentLength),
+			humanize.Bytes(uint64(written)),
+			humanize.Bytes(uint64(contentLength)),
 			float64(written)/float64(contentLength)*100,
 			wc.GetSpeed(),
 		)

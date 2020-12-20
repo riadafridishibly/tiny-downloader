@@ -12,7 +12,7 @@ import (
 )
 
 // Download downloads a single file
-func Download(url, filename string, startAt, count uint64, writeCounter *WriteCounter) error {
+func Download(url, filename string, startAt, count int64, writeCounter *WriteCounter) error {
 	client := http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 
@@ -49,8 +49,15 @@ func Download(url, filename string, startAt, count uint64, writeCounter *WriteCo
 func DownloadConcurrent(url, filename string, n int, contentLength int64, wc *WriteCounter) error {
 	wg := sync.WaitGroup{}
 
-	dl := func(url, filename string, start, count uint64) {
+	dl := func(url, filename string, start, count int64) {
 		defer wg.Done()
+		// finfo, err := os.Stat(filename)
+		// if err == nil { // partial file found
+		// 	if finfo.Size() < count { // full file downloaded
+		// 		start += finfo.Size()
+		// 		wc.Add(finfo.Size())
+		// 	}
+		// }
 		err := Download(url, filename, start, count, wc)
 		if err != nil {
 			log.Fatal(err)
@@ -65,14 +72,14 @@ func DownloadConcurrent(url, filename string, n int, contentLength int64, wc *Wr
 
 	if n > 1 {
 		aggregateNeeded = true
-		size := uint64(math.Ceil(float64(contentLength) / float64(n)))
+		size := int64(math.Ceil(float64(contentLength) / float64(n)))
 		for i := 0; i < n; i++ {
 			wg.Add(1)
-			go dl(url, filename+".part"+strconv.Itoa(i), uint64(i)*size, size)
+			go dl(url, filename+".part"+strconv.Itoa(i), int64(i)*size, size)
 		}
 	} else {
 		wg.Add(1)
-		go dl(url, filename, 0, uint64(contentLength))
+		go dl(url, filename, 0, contentLength)
 	}
 
 	wg.Wait() // wait for all downloader to finish
