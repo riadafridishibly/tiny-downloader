@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,7 +38,11 @@ func main() {
 
 	header, err := http.Head(url)
 	if err != nil {
-		log.Fatal(err)
+		header, err = http.Get(url)
+		header.Body.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// check if server supports byte ranges
@@ -66,7 +71,10 @@ func main() {
 	}
 
 	if filename == "" {
-		filename = "output"
+		filename = path.Base(url)
+		if filename == "/" || filename == "." {
+			filename = "output"
+		}
 	}
 
 	writeCounter := &WriteCounter{Total: 0, LastTime: time.Now().UnixNano()}
@@ -95,7 +103,7 @@ func main() {
 
 	aggregateNeeded := false
 
-	if isRangeSupported && contentLength > 1024 {
+	if isRangeSupported && contentLength > 1024 && n > 1 {
 		aggregateNeeded = true
 		size := uint64(math.Ceil(float64(contentLength) / float64(n)))
 		for i := 0; i < n; i++ {

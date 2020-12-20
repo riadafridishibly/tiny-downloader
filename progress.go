@@ -37,7 +37,13 @@ func (wc *WriteCounter) GetSpeed() string {
 func ShowProgress(wc *WriteCounter, contentLength uint64, filename string, done chan struct{}) {
 	for {
 		written := wc.GetCount()
-		fmt.Printf("\r[%s] Downloaded: %.2f%% %s", filename, (float64(written)/float64(contentLength))*100, wc.GetSpeed())
+		fmt.Printf("\r[%s] Downloaded: [%s/%s] (%.2f%%) DL: %s",
+			filename,
+			humanize.Bytes(written),
+			humanize.Bytes(contentLength),
+			float64(written)/float64(contentLength)*100,
+			wc.GetSpeed(),
+		)
 		if written >= contentLength {
 			fmt.Println()
 			done <- struct{}{}
