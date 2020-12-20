@@ -57,7 +57,7 @@ func DownloadConcurrent(url, filename string, n int, contentLength int64, wc *Wr
 		}
 	}
 
-	if n < 0 || n > 16 {
+	if n <= 0 || n > 16 {
 		n = 8
 	}
 
