@@ -9,6 +9,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 // Usage prints the usages of this application
@@ -71,6 +73,23 @@ func main() {
 		filename = strings.ReplaceAll(filename, "%20", " ")
 		if filename == "/" || filename == "." {
 			filename = "output"
+		}
+	}
+
+	// check if the file is already downloaded
+	fileInfo, err := os.Stat(filename)
+
+	if err != nil {
+		// Maybe the file is not found, in which case do nothing
+	} else {
+		// File found, let's see if the size matches the content len
+		if fileInfo.Size() == contentLength { // full file downloaded hopefully!
+			fmt.Printf("[%s] [%s/%s] Download Completed.\n",
+				filename,
+				humanize.Bytes(uint64(fileInfo.Size())),
+				humanize.Bytes(uint64(contentLength)),
+			)
+			os.Exit(0)
 		}
 	}
 

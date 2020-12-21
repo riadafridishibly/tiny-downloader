@@ -49,7 +49,7 @@ func ShowProgress(wc *WriteCounter, contentLength int64, filename string, done c
 			float64(written)/float64(contentLength)*100,
 			wc.GetSpeed(),
 		)
-		if written >= contentLength {
+		if written >= contentLength { // TODO: sloppy logic, maybe fix that?
 			fmt.Println()
 			done <- struct{}{}
 			return

@@ -29,7 +29,7 @@ func Download(url, filename string, startAt, count int64, writeCounter *WriteCou
 	}
 	defer resp.Body.Close()
 
-	outfile, err := os.Create(filename)
+	outfile, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -51,14 +51,17 @@ func DownloadConcurrent(url, filename string, n int, contentLength int64, wc *Wr
 
 	dl := func(url, filename string, start, count int64) {
 		defer wg.Done()
-		// finfo, err := os.Stat(filename)
-		// if err == nil { // partial file found
-		// 	if finfo.Size() < count { // full file downloaded
-		// 		start += finfo.Size()
-		// 		wc.Add(finfo.Size())
-		// 	}
-		// }
-		err := Download(url, filename, start, count, wc)
+		finfo, err := os.Stat(filename)
+		if err == nil { // partial file found
+			if finfo.Size() < count { // full file yet to be downloaded
+				start += finfo.Size()
+				count -= finfo.Size()
+			} else {
+				return
+			}
+			wc.Add(finfo.Size())
+		}
+		err = Download(url, filename, start, count, wc)
 		if err != nil {
 			log.Fatal(err)
 		}
