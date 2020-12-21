@@ -18,14 +18,14 @@ func TestDownloadConcurrent(t *testing.T) {
 	// create the test file
 	tmpfile, err := ioutil.TempFile("testdata", "test2mb")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("creating temp file:", err)
 	}
 	defer os.Remove(tmpfile.Name()) // clean up
 
 	buff := make([]byte, 2*(1<<20))
 	rand.Read(buff)
 	if _, err := tmpfile.Write(buff); err != nil {
-		t.Fatal(err)
+		t.Fatal("write to temp file:", err)
 	}
 
 	// spin up the server
@@ -46,7 +46,7 @@ func TestDownloadConcurrent(t *testing.T) {
 	err = DownloadConcurrent(ts.URL, down2mb, 8, resp.ContentLength, &WriteCounter{})
 
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("downloading file:", err)
 	}
 
 	defer os.Remove(down2mb)
