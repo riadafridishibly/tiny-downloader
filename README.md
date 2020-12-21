@@ -21,3 +21,4 @@ $ ./tiny-downloader -n 16 http://ipv4.download.thinkbroadband.com/20MB.zip
 - [x] Add downloaded size in progress bar
 - [ ] Add resume support
 - [ ] Intelligent file divide (maybe power of 2?)
+- [ ] Use single file like "aria2" rather than creating multiple ".part" files
