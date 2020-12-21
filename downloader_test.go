@@ -7,16 +7,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 func TestDownloadConcurrent(t *testing.T) {
 
-	// create `testdata` directory
-	_ = os.Mkdir("testdata", os.ModeDir)
+	dir := os.TempDir()
+
+	// // create `testdata` directory
+	// _ = os.Mkdir("testdata", os.ModeDir)
 
 	// create the test file
-	tmpfile, err := ioutil.TempFile("testdata", "test2mb")
+	tmpfile, err := ioutil.TempFile(dir, "test2mb")
 	if err != nil {
 		t.Fatal("creating temp file:", err)
 	}
@@ -42,7 +45,7 @@ func TestDownloadConcurrent(t *testing.T) {
 		t.Fatal("head request:", err)
 	}
 
-	down2mb := "testdata/down2mb"
+	down2mb := filepath.Join(dir, "down2mb")
 	err = DownloadConcurrent(ts.URL, down2mb, 8, resp.ContentLength, &WriteCounter{})
 
 	if err != nil {
